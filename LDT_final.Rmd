@@ -1,0 +1,588 @@
+---
+title: "LDT_final"
+author: "Hadil"
+date: "2023-02-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+install.packages("optimx")
+install.packages("lme4")
+install.packages("Matrix")
+install.packages("ggplot2")
+install.packages("usethis")
+install.packages("tidyverse")
+install.packages("nlme")
+install.packages("janitor")
+devtools::install_github('cttobin/ggthemr')
+devtools::install_github("hadley/devtools")
+
+```
+
+
+```{r}
+library(Matrix)
+library(readxl)
+library(usethis)
+library(ggplot2)
+library(ggthemr)
+library(lme4)
+library(devtools)
+library(Matrix)
+library(DT)
+library(optimx)
+library(ggdist)
+library(brms)
+library(ggeffects)
+library(dplyr)
+library(tidyverse)
+library(nlme)
+library(lmerTest)
+```
+
+
+## coding level factors
+```{r}
+LDT_final$Condition = ifelse(LDT_final$condition4 == "CONG", -0.5, 0.5)
+```
+
+```{r}
+LDT_final <- LDT_final %>%
+  mutate(hs1 = case_when(group == "AHS" ~ -1L, # baseline
+                          group == "HS1" ~ 1L,  # target
+                          TRUE      ~ 0L), # anything else
+         hs2 = case_when(group == "AHS" ~ -1L, # baseline
+                          group == "HS2" ~  1L, # target
+                          TRUE      ~ 0L), # anything else
+          rt1 = case_when(group == "AHS" ~ -1L, # baseline
+                          group == "RT1" ~  1L, # target
+                          TRUE      ~ 0L), # anything else
+          rt2 = case_when(group == "AHS" ~ -1L, # baseline
+                          group == "RT2" ~  1L, # target
+                          TRUE      ~ 0L))
+
+```
+
+```{r}
+LDT_final <- LDT_final %>%
+  mutate(incong = case_when(condition == "Congruent" ~ -1L, # baseline
+                          condition == "Incongruent" ~  1L, # target
+                          TRUE      ~ 0L), # anything else
+          unacw = case_when(condition == "Congruent" ~ -1L, # baseline
+                          condition == "UnaccWithArEq" ~  1L, # target
+                          TRUE      ~ 0L), # anything else
+          unacwt = case_when(condition == "Congruent" ~ -1L, # baseline
+                          condition == "UnaccWithoutArEq" ~  1L, # target
+                          TRUE      ~ 0L))
+
+```
+
+```{r}
+library(dplyr)
+
+sum_table_LDT_accuracy <- LDT_final %>%
+  mutate(accuracy = as.numeric(as.character(accuracy))) %>%
+  group_by(condition, group) %>%
+  summarise(
+    Total = mean(accuracy)
+  ) %>%
+  ungroup()
+
+print(sum_table_LDT_accuracy)
+```
+```{r}
+library(dplyr)
+
+sum_table_LDT_rt <- LDT_final %>%
+  group_by(condition, group) %>%
+  summarise(
+    Total = mean(rt, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+print(sum_table_LDT_rt)
+```
+
+
+```{r}
+LDT_final$group <- as.factor(LDT_final$group)
+LDT_final$item <- as.factor(LDT_final$item)
+LDT_final$accuracy <- as.factor(LDT_final$accuracy)
+
+str(LDT_final)
+```
+```{r}
+LDT_final$Dominance_score <- scale(LDT_final$Dominance_score, center = TRUE, scale = TRUE)
+LDT_final$English_use <- scale(LDT_final$English_use, center = TRUE, scale = TRUE)
+LDT_final$Arabic_use <- scale(LDT_final$Arabic_use, center = TRUE, scale = TRUE)
+colnames(LDT_final)[30] <- "Domscale"
+colnames(LDT_final)[22] <- "Englishscale"
+colnames(LDT_final)[23] <- "Arabicscale"
+LDT_final$English_attidutes <- scale(LDT_final$English_attidutes, center = TRUE, scale = TRUE)
+LDT_final$Arabic_attidutes <- scale(LDT_final$Arabic_attidutes, center = TRUE, scale = TRUE)
+LDT_final$Arabic_history <- scale(LDT_final$Arabic_history, center = TRUE, scale = TRUE)
+LDT_final$English_history <- scale(LDT_final$English_history, center = TRUE, scale = TRUE)
+colnames(LDT_final)[26] <- "Englishattscale"
+colnames(LDT_final)[27] <- "Arabicattscale"
+colnames(LDT_final)[20] <- "Enghistscale"
+colnames(LDT_final)[21] <- "Arabhistscale"
+
+
+
+```
+
+
+```{r}
+ggthemr("fresh")
+library(readxl)
+LDT_final <- read_excel("LDT_final.xlsm")
+View(LDT_final)
+  janitor::clean_names() |>
+  mutate(participant = as.factor(participant),
+         group = as.factor(group),
+  )
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+LDT_final %>%
+  group_by(group) %>%
+  summarise(across(
+    where(is.numeric),
+    list(mean = ~mean(.x, na.rm = TRUE),
+         count = ~sum(!is.na(.x)),
+         sd = ~sd(.x, na.rm = TRUE),     # Add standard deviation calculation
+         range = ~diff(range(.x, na.rm = TRUE)))   # Add range calculation
+  ))
+```
+```{r}
+LDT_final %>%
+  group_by(group) %>%
+  summarise(across(
+    where(is.numeric),
+    list(mean = ~mean(.x, na.rm = TRUE),
+         count = ~sum(!is.na(.x)),
+         sd = ~sd(.x, na.rm = TRUE),     # Add standard deviation calculation
+         range = ~diff(range(.x, na.rm = TRUE)),   # Add range calculation
+         min = ~min(.x, na.rm = TRUE),     # Add minimum calculation
+         max = ~max(.x, na.rm = TRUE))     # Add maximum calculation
+  ))
+```
+
+```{r}
+LDT_final %>%
+  group_by(group) %>%
+  group_by(condition, group) %>%
+  summarise(across(
+    where(is.numeric),
+    list(mean = ~mean(.x, na.rm = TRUE),
+         count = ~sum(!is.na(.x)),
+         sd = ~sd(.x, na.rm = TRUE),
+         range = ~diff(range(.x, na.rm = TRUE)),
+         min = ~min(.x, na.rm = TRUE),     # Add minimum calculation
+         max = ~max(.x, na.rm = TRUE)      # Add maximum calculation
+    ))) 
+```
+
+```{r}
+hist(LDT_final$rt)
+log_rt_LDT <- log(LDT_final$rt)
+hist(log_rt_LDT)
+```
+
+# RT per condition
+
+```{r}
+LDT_final |>
+  ggplot(aes(x = group, y = log_rt_LDT, fill = condition)) +
+  geom_boxplot()
+```
+```{r}
+LDT_final |>
+  mutate(accuracy = as.numeric(as.character(accuracy))) %>%
+  ggplot(aes(x = condition, y = accuracy, fill = group)) +
+  geom_boxplot()
+```
+## Data summary
+
+```{r}
+LDT_final %>%
+group_by(group) %>%
+  summarise(across(where(is.numeric),
+    list(mean = ~ mean(.x, na.rm = TRUE), count = ~ sum(!is.na(.x)))))
+```
+```{r}
+library(dplyr)
+
+sum_table_acc <- LDT_final %>%
+  mutate(accuracy = as.numeric(as.character(accuracy))) %>%
+  group_by(group) %>%
+  summarise(
+    Total = mean(accuracy)
+  ) %>%
+  ungroup()
+
+print(sum_table_acc)
+```
+
+# Correct answers per group & condition
+
+```{r}
+library(data.table)
+freqs <- LDT_final |>
+  group_by(group, condition) |>
+  summarize(total_correct = sum(accuracy),
+            fract_correct = total_correct / n()) |>
+  arrange(condition, group)
+
+freqs |> data.table()
+
+
+```
+# Correct answers per group & condition, visualized as bar plot
+
+```{r, fig.width=20, fig.height=6}
+freqs |>
+  ggplot(aes(x = group, y =accuracy, fill = group)) +
+  geom_col() +
+  facet_wrap(~ condition, ncol = 4) +
+  theme(legend.position = "bottom")
+```
+
+# RTs per group & condition
+
+```{r}
+rts <- LDT_final|>
+  filter(!is.na(log_rt_LDT)) |>
+  group_by(group, condition) |> 
+  summarize(median_rt = median(log_rt_LDT),
+            iqr_rt = IQR(log_rt_LDT)) |> 
+  arrange(condition, group)
+
+rts |> data.table()
+```
+
+
+# RTs visualized using boxplots
+
+```{r, fig.width=20, fig.height=6}
+
+LDT_final |>
+  filter(!is.na(log_rt_LDT)) |> 
+  ggplot(aes(x = group, y = log_rt_LDT, fill = group)) +
+  geom_boxplot() +
+  facet_wrap(~ condition, ncol = 4) +
+  theme(legend.position = "bottom")
+
+```
+
+# Anomalous participant: unusually large number of observations
+
+```{r}
+LDT_final|> 
+  group_by(participant, condition) |> 
+  count() |> 
+  pull(n) |> 
+  map_lgl(\(x) x == 23) |> 
+  all()
+```
+
+# Models (Accuracy) (Binomial Logistic Regression)
+
+```{r}
+# mod0 <- glmer(as.factor(key_resp_5.CORR) ~ group + (1|group/participant) + (1|condition), family = binomial, data = GapTaskLong, control = glmerControl(check.conv.grad = .makeCC("warning", tol = 5e-2)))
+
+lbfgs_ctrl <- glmerControl()
+
+xls_nb <- LDT_final |>
+  mutate(condition = as.factor(condition) |> relevel(ref = "Congruent"),
+         group = as.factor(group) |> relevel(ref = "AHS"),
+         correct = accuracy == 1)
+
+mod_0_LDT <- glmer(accuracy ~ 1 + (1|participant),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               control = lbfgs_ctrl)
+
+mod_1_LDT <- glmer(accuracy ~ 1 + (1|participant) + (1|item),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               control = lbfgs_ctrl)
+
+mod_2_LDT <- glmer(accuracy ~ group + (1|participant),
+               family = binomial(link = "logit"),
+               data = LDT_final,
+               control = lbfgs_ctrl)
+
+mod_3_LDT <- glmer(accuracy ~ group + (1|participant) + (1|item),
+               family = binomial(link = "logit"),
+               data = LDT_final,
+               control = lbfgs_ctrl)
+
+mod_4_LDT <- glmer(accuracy ~ group * condition + (1|participant) + (1|item),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+
+print(anova(mod_0_LDT, mod_1_LDT, mod_2_LDT, mod_3_LDT,mod_4_LDT ))
+```
+
+```{r}
+print(summary(mod_3_LDT))
+```
+##Model estimates (Accuracy with group)
+This clearly indicates a significant main effect is shown between the returnees and the AHS.
+
+
+```{r}
+model_params_LDT <- broom.mixed::tidy(mod_3_LDT)
+
+model_params_LDT|>
+  filter(!str_detect(term, "sd")) |>
+  ggplot(aes(x = term, y = estimate)) +
+  # geom_hline(yintercept = 1, linetype = "dotted", color = "black") +
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error), width = 0.1, color = "black") +
+  geom_point(aes(color = term), size = 3) +
+  theme(legend.position = "bottom") +
+  labs(y = "Logit", x = "Group")
+```
+# Here I attempt to perform post-hoc by using emmeans for mod_3 (accuracy)
+
+```{r}
+library(emmeans)
+emmeans(mod_3_LDT, list(pairwise ~ group), adjust = "tukey")
+```
+
+# Models with RT
+
+```{r}
+mod0_rt_LDT <- lmer(log_rt_LDT ~ 1 + (1|participant), data = LDT_final)
+
+mod1_rt_LDT <- lmer(log_rt_LDT ~ 1 + (1|participant) + (1|item), data = LDT_final)
+
+mod2_rt_LDT <- lmer(log_rt_LDT ~ group + (1|participant), data = LDT_final)
+
+mod3_rt_LDT <- lmer(log_rt_LDT ~ group + (1|participant) + (1|item), data = LDT_final)
+
+mod4_rt_LDT <- lmer(log_rt_LDT ~ group + length + (1|participant) + (1|item), data = LDT_final)
+
+
+print(anova(mod0_rt_LDT, mod1_rt_LDT, mod2_rt_LDT, mod3_rt_LDT, mod4_rt_LDT))
+```
+
+```{r}
+summary(mod4_rt_LDT)
+```
+
+
+```{r}
+
+ranef(mod3_rt)
+hist(ranef(mod3_rt)$participant[,1])
+hist(ranef(mod3_rt)$item[,1])
+hist(resid(mod3_rt))
+```
+
+# In the graph below it clearly shows a significant main effect between the AHS and the other groups.
+
+```{r}
+model_params_rt_LDT <- broom.mixed::tidy(mod3_rt_LDT)
+
+model_params_rt_LDT |> 
+  filter(!str_detect(term, "sd")) |>
+  ggplot(aes(x = term, y = estimate)) +
+  # geom_hline(yintercept = 1, linetype = "dotted", color = "black") +
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error), width = 0.1, color = "black") +
+  geom_point(aes(color = term), size = 3) +
+  theme(legend.position = "bottom") +
+  labs(y = "Estimate", x = "Group")
+```
+
+# Here I attempt to perform post-hoc by using emmeans for  (reaction time residuals)
+
+```{r}
+library(emmeans)
+emmeans(mod4_rt_LDT, list(pairwise ~ group), adjust = "tukey")
+```
+#Models with interaction with condition for ACCURACY
+
+```{r}
+settingAGQ=0
+```
+
+##interaction between group and condition for ACCURACY
+##condition and group as a fixed effects and a random intercept for participants and for items. “congruent” condition was the reference level for condition.
+```{r}
+
+
+
+mod_0cd_LDT <- glmer(accuracy ~ 1 + (1|participant), 
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+             nAGQ=settingAGQ,control = lbfgs_ctrl) 
+
+mod_1cd_LDT <- glmer(accuracy ~ 1 + (1|participant) + (1|item), 
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               nAGQ=settingAGQ,control= lbfgs_ctrl)
+
+mod_2cd_LDT <- glmer(accuracy ~ group + (1|participant), 
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+              nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+mod_3cd_LDT <- glmer(accuracy ~ group + (1|participant) + (1|item), 
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+             nAGQ=settingAGQ,control  = lbfgs_ctrl)
+
+mod_4cd_LDT<- glmer(accuracy ~ group * condition + (1|participant),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+mod_5cd_LDT <- glmer(accuracy ~ group * condition + (1|participant) + (1|item),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+
+mod_6cd_LDT <- glmer(accuracy ~ group * condition + length + group*length + (1|participant) + (1|item),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+mod_7cd_LDT <- glmer(accuracy ~ group + (hs1 + hs2 + rt1 + rt2) * condition + (1|participant) + (1|item),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+mod_8cd_LDT <- glmer(accuracy ~ (hs1 + hs2 + rt1 + rt2) * condition + (1|participant) + (1|item),
+               family = binomial(link = "logit"), 
+               data = LDT_final,
+               nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+
+
+print(anova(mod_0cd_LDT, mod_1cd_LDT, mod_2cd_LDT, mod_3cd_LDT, mod_4cd_LDT, mod_5cd_LDT, mod_6cd_LDT, mod_7cd_LDT, mod_8cd_LDT))
+```
+
+mod_9cd_LDT <- glmer(accuracy ~ group + (hs1 + hs2 + rt1 + rt2) * condition + (1|participant) + (1+condition|participant) + (1|item),
+               family = binomial(link = "logit"), 
+               data = LDT_final, nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+mod_10cd_LDT <- glmer(accuracy ~ group + (hs1 + hs2 + rt1 + rt2) * condition + (hs1 + hs2 + rt1 + rt2) * Arabicscale + (hs1 + hs2 + rt1 + rt2) * Englishscale + (1|participant) + (1|item), family = binomial(link = "logit"), data = LDT_final, nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+mod_11cd_LDT <- glmer(accuracy ~ group + (hs1 + hs2 + rt1 + rt2) * condition + (hs1 + hs2 + rt1 + rt2) * Arabicscale + (hs1 + hs2 + rt1 + rt2) * Englishscale + (1|participant) + (1|item), family = binomial(link = "logit"), data = LDT_final, nAGQ=settingAGQ,control = lbfgs_ctrl)
+
+```{r}
+print(summary(mod_8cd_LDT))
+```
+
+```{r}
+model_params <- broom.mixed::tidy(mod_9cd_LDT)
+model_params |>
+  filter(!str_detect(term, "sd")) |>
+  ggplot(aes(x = term, y = estimate, color = term)) +
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error), width = 0.3, color = "black") +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("red", "blue", "green", "orange", "purple", "pink", "yellow", "maroon", "black", "brown", "beige", "grey", "magenta", "cyan","seagreen" "skyblue", "darkgray", "navyblue", "lightgrey","darkmagenta" )) +  # Adjust the colors as needed
+  theme(legend.position = "bottom") +
+  labs(y = "Accuracy", x = "Group")
+```
+
+
+```{r}
+library(emmeans)
+emmeans(mod_5cd_LDT, list(pairwise ~ group), adjust = "tukey")
+```
+# Model estimates for Accuracy
+
+```{r}
+model_params_cd_LDT <- broom.mixed::tidy(mod_5cd_LDT)
+
+model_params_cd_LDT |> 
+  filter(!str_detect(term, "sd")) |>
+  ggplot(aes(x = term, y = estimate)) +
+  # geom_hline(yintercept = 1, linetype = "dotted", color = "black") +
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error), width = 0.1, color = "black") +
+  geom_point(aes(color = term), size = 3) +
+  theme(legend.position = "bottom") +
+  labs(y = "Logit", x = "Group") +
+  scale_color_viridis_d() +
+  coord_flip()
+
+```
+
+# RT (interaction with condition)
+
+```{r}
+
+mod_0_rtcd_LDT <- lmer(log_rt_LDT ~ 1 + (1|participant), 
+               data = LDT_final)
+
+mod_1_rtcd_LDT <- lmer(log_rt_LDT ~ group + (1|participant), 
+               data = LDT_final)
+
+mod_2_rtcd_LDT<- lmer(log_rt_LDT ~ group + (1|participant) + (1|item), data = LDT_final)
+
+mod_3_rtcd_LDT <- lmer(log_rt_LDT ~ group * condition + (1|participant) + (1|item), data = LDT_final)
+
+mod_4_rtcd_LDT <- lmer(log_rt_LDT ~ group * length + (1|participant) + (1|item), data = LDT_final)
+
+mod_5_rtcd_LDT <- lmer(log_rt_LDT ~ length + group + (hs1 + hs2 + rt1 + rt2) * condition + (1|participant) + (1|item), data = LDT_final)
+
+mod_6_rtcd_LDT <- lmer(log_rt_LDT ~ length + (hs1 + hs2 + rt1 + rt2) * condition + (1|participant) + (1|item), data = LDT_final)
+
+
+mod_7_rtcd_LDT <- lmer(log_rt_LDT ~ length + group + (hs1 + hs2 + rt1 + rt2) * condition + (hs1 + hs2 + rt1 + rt2) * Arabicscale + (hs1 + hs2 + rt1 + rt2) * Englishscale + (1|participant) + (1|item), data = LDT_final)
+
+mod_8_rtcd_LDT <- lmer(log_rt_LDT ~ length + group * condition + (1|participant) + (1|item) + (1+condition|participant), data = LDT_final)
+
+
+
+anova(mod_0_rtcd_LDT, mod_1_rtcd_LDT, mod_2_rtcd_LDT, mod_3_rtcd_LDT, mod_4_rtcd_LDT, mod_5_rtcd_LDT, mod_6_rtcd_LDT, mod_7_rtcd_LDT, mod_8_rtcd_LDT)
+```
+
+
+##According to the results, it shows that the t values are all below two so there is no main effect of RT (interaction with condition)
+
+
+```{r}
+summary(mod_8_rtcd_LDT)
+```
+```{r}
+library(ggplot2)
+ggplot(LDT_final, aes(x = accuracy, y = rt, color = group)) +
+  geom_point() +
+  geom_smooth(method='lm',formula=y~x)
+```
+
+
+
+```{r}
+anova(mod_6_rtcd)
+library(lmerTest)
+```
+
+```{r}
+model_params_rtcd <- broom.mixed::tidy(mod_5_rtcd)
+
+model_params_rtcd |> 
+  filter(!str_detect(term, "sd")) |>
+  ggplot(aes(x = term, y = estimate)) +
+  # geom_hline(yintercept = 1, linetype = "dotted", color = "black") +
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error), width = 0.1, color = "black") +
+  geom_point(aes(color = term), size = 3) +
+  theme(legend.position = "bottom") +
+  scale_color_viridis_d() +
+  labs(y = "Estimate", x = "Group") +
+  coord_flip()
+```
